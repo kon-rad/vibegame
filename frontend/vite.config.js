@@ -9,7 +9,8 @@ export default defineConfig({
       '/api': {
         target: 'http://localhost:3001',
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api/, '')
+        // Remove the rewrite rule so the /api prefix is preserved
+        // rewrite: (path) => path.replace(/^\/api/, '')
       },
       '/colyseus': {
         target: 'ws://localhost:3001',

@@ -8,15 +8,8 @@ if (!fs.existsSync(dataDir)) {
   fs.mkdirSync(dataDir, { recursive: true });
 }
 
-// Initialize Prisma client with required configuration
-const prisma = new PrismaClient({
-  // Add required configuration to fix initialization error
-  __internal: {
-    enableExperimentalDrivers: true,
-    // This is the missing field that caused the error
-    enableTracing: false
-  }
-});
+// Initialize Prisma client
+const prisma = new PrismaClient();
 
 // Seed database with default characters if needed
 async function initializeCharacters() {
@@ -96,12 +89,53 @@ const database = {
   // Save a conversation
   saveConversation: async (userId, characterId, title = 'Untitled Conversation') => {
     try {
-      const conversation = await prisma.conversation.create({
-        data: {
-          title,
-          characterId: Number(characterId),
-          userId: userId ? Number(userId) : undefined
+      // First, ensure the character exists
+      const character = await prisma.character.findUnique({
+        where: { id: Number(characterId) }
+      });
+
+      if (!character) {
+        throw new Error(`Character with ID ${characterId} not found`);
+      }
+
+      // If userId is provided, ensure the user exists or create a default one
+      let userIdToUse = null;
+      if (userId) {
+        // Check if user exists
+        const existingUser = await prisma.user.findUnique({
+          where: { id: Number(userId) }
+        });
+
+        if (existingUser) {
+          userIdToUse = existingUser.id;
+        } else {
+          // Create a new user if not found
+          console.log(`User ID ${userId} not found. Creating default user.`);
+          const newUser = await prisma.user.create({
+            data: {
+              id: Number(userId),
+              username: `user_${userId}`,
+              email: `user_${userId}@example.com`
+            }
+          });
+          userIdToUse = newUser.id;
         }
+      }
+
+      // Create conversation with validated user and character
+      // Use the default title if title is null
+      const conversationData = {
+        characterId: Number(characterId),
+        userId: userIdToUse
+      };
+      
+      // Only add title if it's not null (prisma doesn't accept null)
+      if (title !== null) {
+        conversationData.title = title;
+      }
+      
+      const conversation = await prisma.conversation.create({
+        data: conversationData
       });
       
       return { id: conversation.id };

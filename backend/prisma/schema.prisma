@@ -11,13 +11,23 @@ datasource db {
 }
 
 model Character {
-  id            Int            @id @default(autoincrement())
-  name          String
-  era           String
-  bio           String
-  avatar        String?
-  createdAt     DateTime       @default(now()) @map("created_at")
-  conversations Conversation[]
+  id              Int              @id @default(autoincrement())
+  name            String
+  era             String
+  bio             String
+  avatar          String?
+  position        String?          // JSON string for 3D position
+  color           String?          // Character's main color
+  primaryColor    String?          // Secondary color for UI elements
+  skinColor       String?          // Color for character skin
+  specialty       String?          // Character's specialty/expertise
+  specialKeywords String?          // JSON string for special keywords
+  dialogueStyle   String?          // Description of the character's dialogue style
+  aiPrompt        String?          // Base prompt used for AI generation
+  createdAt       DateTime         @default(now()) @map("created_at")
+  conversations   Conversation[]
+  chatRooms       ChatRoom[]       // New relationship with ChatRoom
+  tokenGrants     TokenGrant[]     // Track tokens granted by this character
 
   @@map("characters")
 }
@@ -26,8 +36,15 @@ model User {
   id            Int            @id @default(autoincrement())
   username      String         @unique
   email         String?        @unique
+  avatarUrl     String?        @map("avatar_url")
+  bio           String?
+  lastActive    DateTime?      @map("last_active")
   createdAt     DateTime       @default(now()) @map("created_at")
   conversations Conversation[]
+  roomMembers   RoomMember[]   // New relationship for chat rooms
+  tokenBalance  Int            @default(0) @map("token_balance") // Track tokens earned
+  tokenGrants   TokenGrant[]   // Track token granting events
+  settings      String?        // Store settings as JSON string
 
   @@map("users")
 }
@@ -36,11 +53,14 @@ model Conversation {
   id          Int       @id @default(autoincrement())
   title       String    @default("Untitled Conversation")
   createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at") // Add last updated timestamp
   character   Character @relation(fields: [characterId], references: [id])
   characterId Int       @map("character_id")
   user        User?     @relation(fields: [userId], references: [id])
   userId      Int?      @map("user_id")
   messages    Message[]
+  isArchived  Boolean   @default(false) @map("is_archived") // Allow archiving conversations
+  metadata    String?   // Additional data about the conversation as JSON string
 
   @@map("conversations")
 }
@@ -52,6 +72,64 @@ model Message {
   createdAt      DateTime     @default(now()) @map("created_at")
   conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   conversationId Int          @map("conversation_id")
+  metadata       String?      // Additional data like sentiment, tokens, etc. as JSON string
+  readStatus     Boolean      @default(true) @map("read_status") // Track if message has been read
 
   @@map("messages")
+}
+
+// New models below
+
+model ChatRoom {
+  id          Int          @id @default(autoincrement())
+  name        String
+  description String?
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt   DateTime     @updatedAt @map("updated_at")
+  characters  Character[]  // Characters present in this room
+  members     RoomMember[] // Users who joined this room
+  roomMessages RoomMessage[] // Messages in the room
+  isPublic    Boolean      @default(true) @map("is_public")
+
+  @@map("chat_rooms")
+}
+
+model RoomMember {
+  id         Int       @id @default(autoincrement())
+  user       User      @relation(fields: [userId], references: [id])
+  userId     Int       @map("user_id")
+  chatRoom   ChatRoom  @relation(fields: [chatRoomId], references: [id], onDelete: Cascade)
+  chatRoomId Int       @map("chat_room_id")
+  joinedAt   DateTime  @default(now()) @map("joined_at")
+  lastRead   DateTime? @map("last_read")
+  role       String    @default("member") // "admin", "member", etc.
+
+  @@unique([userId, chatRoomId])
+  @@map("room_members")
+}
+
+model RoomMessage {
+  id         Int      @id @default(autoincrement())
+  chatRoom   ChatRoom @relation(fields: [chatRoomId], references: [id], onDelete: Cascade)
+  chatRoomId Int      @map("chat_room_id")
+  senderId   Int      @map("sender_id") // User or Character ID
+  senderType String   @map("sender_type") // "user" or "character"
+  text       String
+  createdAt  DateTime @default(now()) @map("created_at")
+  metadata   String?  // JSON string metadata
+
+  @@map("room_messages")
+}
+
+model TokenGrant {
+  id          Int       @id @default(autoincrement())
+  user        User      @relation(fields: [userId], references: [id])
+  userId      Int       @map("user_id")
+  character   Character @relation(fields: [characterId], references: [id])
+  characterId Int       @map("character_id")
+  amount      Int       @default(1)
+  reason      String    @default("conversation") // Why tokens were granted
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  @@map("token_grants")
 }

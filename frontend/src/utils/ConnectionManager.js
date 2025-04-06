@@ -46,7 +46,7 @@ const MOCK_ENVIRONMENT_DATA = {
 class ConnectionManager {
   constructor() {
     this.environmentData = MOCK_ENVIRONMENT_DATA;
-    this.apiBaseUrl = '/api'; // Base URL for API calls
+    this.apiBaseUrl = '/api'; // This is correct, as it's relative to the frontend server
     this.useRealApi = true; // Set to false to use mock data instead of real API
     console.log('ConnectionManager initialized');
   }
@@ -74,7 +74,7 @@ class ConnectionManager {
     }
     
     try {
-      // Call the backend API
+      // Call the backend API - make sure we're using the correct endpoint
       const response = await fetch(`${this.apiBaseUrl}/conversation`, {
         method: 'POST',
         headers: {
