@@ -1,28 +1,24 @@
 {
-  "name": "backend",
+  "name": "historical-conversations-backend",
   "version": "1.0.0",
-  "main": "src/server/index.js",
+  "description": "Backend for the 3D Historical Conversations application",
+  "main": "src/index.js",
   "scripts": {
-    "start": "node src/server/index.js",
-    "dev": "nodemon src/server/index.js",
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "description": "",
   "dependencies": {
-    "@colyseus/core": "^0.14.36",
-    "@colyseus/schema": "^1.0.45",
+    "colyseus": "^0.14.23",
     "@colyseus/ws-transport": "^0.14.21",
-    "colyseus": "^0.14.24",
     "cors": "^2.8.5",
-    "dotenv": "^16.3.1",
     "express": "^4.18.2",
-    "socket.io": "^4.7.4",
-    "sqlite3": "^5.1.7"
+    "socket.io": "^4.7.4"
   },
   "devDependencies": {
-    "nodemon": "^3.1.9"
+    "nodemon": "^3.0.1"
   }
 }

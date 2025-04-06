@@ -1,113 +1,55 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { useFrame, useThree } from '@react-three/fiber';
-import { useGLTF, Text, Html } from '@react-three/drei';
-import * as THREE from 'three';
+import React, { useState, useEffect } from 'react';
+import { useThree } from '@react-three/fiber';
+import { Text } from '@react-three/drei';
+import Environment from './Environment';
+import HumanoidCharacter from '../components/HumanoidCharacter';
 
-// Mock data for historical characters
-const HISTORICAL_CHARACTERS = [
+// Fallback data in case server is unavailable
+const FALLBACK_CHARACTERS = [
   {
     id: 1,
     name: 'Socrates',
     era: 'Ancient Greece, 470-399 BCE',
+    bio: 'Athenian philosopher who is credited as the founder of Western philosophy.',
     avatar: '/assets/avatars/socrates.jpg',
-    position: [-3, 0, 0],
-    color: '#4287f5'
+    position: [-5, 0, 0],
+    color: '#4287f5',
+    primaryColor: '#8ca9ff',
+    skinColor: '#e9c9a8',
+    specialty: 'Dialectic method, ethics, epistemology'
   },
   {
     id: 2,
     name: 'Leonardo da Vinci',
     era: 'Renaissance Italy, 1452-1519',
+    bio: 'Italian polymath whose interests included invention, drawing, painting, sculpture, architecture, science, music, mathematics, engineering, literature, anatomy, geology, astronomy, botany, paleontology, and cartography.',
     avatar: '/assets/avatars/davinci.jpg',
     position: [0, 0, 0],
-    color: '#f54263'
+    color: '#f54263',
+    primaryColor: '#c74e36',
+    skinColor: '#f0d0b0',
+    specialty: 'Art, science, engineering, anatomy'
   },
   {
     id: 3,
     name: 'Marie Curie',
     era: 'Modern Poland/France, 1867-1934',
+    bio: 'Polish and naturalized-French physicist and chemist who conducted pioneering research on radioactivity.',
     avatar: '/assets/avatars/curie.jpg',
-    position: [3, 0, 0],
-    color: '#42f59e'
+    position: [5, 0, 0],
+    color: '#42f59e',
+    primaryColor: '#457b86',
+    skinColor: '#e0b6a0',
+    specialty: 'Physics, chemistry, radioactivity'
   }
 ];
 
-// Character component that represents a historical figure in 3D
-const Character = ({ character, onClick, isSelected }) => {
-  const meshRef = useRef();
+// Main game scene component
+const GameScene = ({ characters = FALLBACK_CHARACTERS, onCharacterSelect }) => {
+  const [selectedCharacter, setSelectedCharacter] = useState(null);
   const { camera } = useThree();
   
-  // Simple animation for the character
-  useFrame((state, delta) => {
-    if (meshRef.current) {
-      meshRef.current.rotation.y += delta * 0.5;
-      
-      // Make the character slightly bounce
-      meshRef.current.position.y = character.position[1] + Math.sin(state.clock.elapsedTime * 2) * 0.05;
-    }
-  });
-  
-  // Handle hover effect
-  const [hovered, setHovered] = useState(false);
-  
-  // Visual feedback when character is hovered/selected
-  const color = new THREE.Color(character.color);
-  color.lerp(new THREE.Color('white'), hovered ? 0.2 : 0);
-  
-  if (isSelected) {
-    color.lerp(new THREE.Color('gold'), 0.3);
-  }
-  
-  // For now, we'll use simple geometric shapes as placeholders
-  // In a real game, you'd load character models here
-  return (
-    <group position={character.position}>
-      <mesh 
-        ref={meshRef}
-        onClick={() => onClick(character)}
-        onPointerOver={() => setHovered(true)}
-        onPointerOut={() => setHovered(false)}
-        castShadow
-      >
-        <boxGeometry args={[1, 2, 1]} />
-        <meshStandardMaterial color={color.getHex()} metalness={0.1} roughness={0.8} />
-      </mesh>
-      
-      {/* Character name label */}
-      <Text
-        position={[0, 1.5, 0]}
-        color="white"
-        fontSize={0.2}
-        maxWidth={2}
-        textAlign="center"
-        anchorY="bottom"
-        lookAt={camera.position}
-      >
-        {character.name}
-      </Text>
-      
-      {/* Era information shown on hover */}
-      {(hovered || isSelected) && (
-        <Text
-          position={[0, 1.2, 0]}
-          color="#aaaaff"
-          fontSize={0.12}
-          maxWidth={2}
-          textAlign="center"
-          anchorY="bottom"
-          lookAt={camera.position}
-        >
-          {character.era}
-        </Text>
-      )}
-    </group>
-  );
-};
-
-// Main game scene component
-const GameScene = ({ onCharacterSelect }) => {
-  const [selectedCharacter, setSelectedCharacter] = useState(null);
-  
-  // Ground/floor
+  // Handle character selection
   const handleCharacterClick = (character) => {
     setSelectedCharacter(character);
     if (onCharacterSelect) {
@@ -115,17 +57,22 @@ const GameScene = ({ onCharacterSelect }) => {
     }
   };
   
+  // Reset camera on mount
+  useEffect(() => {
+    if (camera) {
+      camera.position.set(0, 5, 10);
+      camera.lookAt(0, 0, 0);
+    }
+  }, [camera]);
+  
   return (
     <group>
-      {/* Environment */}
-      <mesh receiveShadow rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.5, 0]}>
-        <planeGeometry args={[30, 30]} />
-        <meshStandardMaterial color="#111133" />
-      </mesh>
+      {/* Environment (sky, ground, trees, etc.) */}
+      <Environment />
       
-      {/* Historical characters */}
-      {HISTORICAL_CHARACTERS.map((character) => (
-        <Character 
+      {/* Historical characters as humanoid avatars */}
+      {characters.map((character) => (
+        <HumanoidCharacter 
           key={character.id}
           character={character}
           onClick={handleCharacterClick}
@@ -140,6 +87,8 @@ const GameScene = ({ onCharacterSelect }) => {
         fontSize={0.3}
         maxWidth={10}
         textAlign="center"
+        outlineWidth={0.02}
+        outlineColor="#000000"
       >
         Select a historical figure to start a conversation
       </Text>

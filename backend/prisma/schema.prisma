@@ -1,0 +1,57 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Character {
+  id            Int            @id @default(autoincrement())
+  name          String
+  era           String
+  bio           String
+  avatar        String?
+  createdAt     DateTime       @default(now()) @map("created_at")
+  conversations Conversation[]
+
+  @@map("characters")
+}
+
+model User {
+  id            Int            @id @default(autoincrement())
+  username      String         @unique
+  email         String?        @unique
+  createdAt     DateTime       @default(now()) @map("created_at")
+  conversations Conversation[]
+
+  @@map("users")
+}
+
+model Conversation {
+  id          Int       @id @default(autoincrement())
+  title       String    @default("Untitled Conversation")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  character   Character @relation(fields: [characterId], references: [id])
+  characterId Int       @map("character_id")
+  user        User?     @relation(fields: [userId], references: [id])
+  userId      Int?      @map("user_id")
+  messages    Message[]
+
+  @@map("conversations")
+}
+
+model Message {
+  id             Int          @id @default(autoincrement())
+  text           String       @map("message_text")
+  senderType     String       @map("sender_type") // 'user' or 'character'
+  createdAt      DateTime     @default(now()) @map("created_at")
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  conversationId Int          @map("conversation_id")
+
+  @@map("messages")
+}

@@ -1,0 +1,136 @@
+# Frontend Architecture Documentation
+
+## Overview
+
+This document provides a comprehensive overview of the frontend architecture for the 3D AI Game application. The application allows users to interact with historical figures in a 3D environment and engage in conversations with them.
+
+## Tech Stack
+
+### Core Technologies
+
+- **Framework**: React (v18.2.0)
+- **Build System**: Vite (v6.2.5)
+- **3D Rendering**: 
+  - Three.js (v0.160.0)
+  - React Three Fiber (v8.15.16)
+  - React Three Drei (v9.99.1)
+- **Backend Communication**:
+  - Socket.IO Client (v4.7.4)
+  - Colyseus.js (v0.14.13)
+
+## Project Structure
+
+```
+frontend/
+├── node_modules/
+├── src/
+│   ├── assets/           # Static assets 
+│   ├── components/       # Reusable React components
+│   │   ├── ChatInterface.jsx
+│   │   └── LoadingScreen.jsx
+│   ├── scenes/           # 3D scene components
+│   │   └── GameScene.jsx
+│   ├── utils/            # Utility functions and classes
+│   │   └── ConnectionManager.js
+│   ├── App.jsx           # Main application component
+│   ├── main.jsx          # Entry point
+│   └── index.css         # Global styles
+├── index.html            # HTML entry point
+├── vite.config.js        # Vite configuration
+├── package.json          # Dependencies and scripts
+└── package-lock.json     # Dependency lock file
+```
+
+## Application Architecture
+
+### Entry Point
+
+The application starts with `main.jsx`, which renders the main `App` component to the DOM.
+
+### Main Components
+
+1. **App (App.jsx)**
+   - The root component that orchestrates the entire application
+   - Manages global application state (loading state, game connection, current character, chat messages)
+   - Renders the 3D canvas and UI components based on application state
+
+2. **GameScene (scenes/GameScene.jsx)**
+   - Renders the 3D environment with historical character models
+   - Manages character selection and interactions
+   - Displays character information in 3D space
+   - Contains mockup data for historical characters
+
+3. **ChatInterface (components/ChatInterface.jsx)**
+   - Provides a UI for conversing with selected historical figures
+   - Manages message input and display
+   - Handles message submission and display
+   - Includes styled UI components for the chat interface
+
+4. **LoadingScreen (components/LoadingScreen.jsx)**
+   - Displays during initial application loading
+
+### Utility Modules
+
+1. **ConnectionManager (utils/ConnectionManager.js)**
+   - Manages connections to backend services
+   - Handles both WebSocket communications via Socket.IO and Colyseus
+   - Provides methods for joining game rooms and sending/receiving messages
+   - Manages connection state and error handling
+
+## Network Architecture
+
+The application uses dual communication channels:
+
+1. **Colyseus.js**
+   - Used for real-time game state synchronization
+   - Handles room management and game-specific messaging
+
+2. **Socket.IO**
+   - Used for non-game related communications
+   - Provides fallback communication mechanisms
+
+## 3D Implementation
+
+The application leverages React Three Fiber and Drei to create a 3D environment:
+
+- **Canvas**: The main 3D container that hosts the entire 3D scene
+- **GameScene**: Contains the 3D environment, floor, and character models
+- **Character Component**: Represents a historical figure in 3D space with:
+  - Interactive 3D models (currently placeholder shapes)
+  - Floating text labels
+  - Hover and selection effects
+  - Simple animations
+
+## Data Flow
+
+1. User selects a historical character in the 3D scene
+2. The selected character is passed to the App component
+3. Chat interface appears, allowing the user to send messages
+4. Messages are processed, sent to the backend, and responses are displayed
+5. Chat history is maintained in the App component's state
+
+## Server Communication
+
+The application establishes connections with backend services through:
+
+1. **HTTP API Proxy**:
+   - All API requests are proxied through `/api` to `http://localhost:3001`
+
+2. **WebSocket Connections**:
+   - Colyseus connections are established via `ws://localhost:3001/colyseus`
+   - Socket.IO connections are made directly to `http://localhost:3001`
+
+## Development Setup
+
+The application is configured with Vite for development:
+- Development server runs on port 3000
+- Proxies backend requests to port 3001
+- Supports hot module reloading
+
+## Future Enhancements
+
+Based on the codebase, potential enhancements could include:
+1. Integration with real 3D models instead of placeholders
+2. More advanced animations and interactions
+3. Enhanced AI conversation capabilities
+4. Multiplayer features using the existing Colyseus infrastructure 
