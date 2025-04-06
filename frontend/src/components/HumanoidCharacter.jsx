@@ -4,7 +4,7 @@ import { Text, Html } from '@react-three/drei';
 import * as THREE from 'three';
 
 // Basic humanoid character representation
-const HumanoidCharacter = ({ character, onClick, isSelected, isNearby }) => {
+const HumanoidCharacter = ({ character, onClick, isSelected, isNearby, isMoving = false, isInteracting = false }) => {
   const { camera } = useThree();
   const group = useRef();
   const bodyRef = useRef();
@@ -38,7 +38,7 @@ const HumanoidCharacter = ({ character, onClick, isSelected, isNearby }) => {
       headRef.current.rotation.y = Math.sin(state.clock.elapsedTime * 0.5) * 0.2;
       
       // If nearby, make the character look at the player
-      if (isNearby) {
+      if (isNearby || isInteracting) {
         const lookAtPlayer = new THREE.Vector3(0, 1.5, 5); // Approximate player position
         headRef.current.lookAt(lookAtPlayer);
         // Limit rotation to avoid unnatural angles
@@ -47,8 +47,8 @@ const HumanoidCharacter = ({ character, onClick, isSelected, isNearby }) => {
       }
     }
     
-    // Arm movement for selected character (talking animation)
-    if (isSelected && rightArmRef.current && leftArmRef.current) {
+    // Arm movement for selected character or when interacting (talking animation)
+    if ((isSelected || isInteracting) && rightArmRef.current && leftArmRef.current) {
       // Right arm gestures
       rightArmRef.current.rotation.x = Math.sin(state.clock.elapsedTime * 2) * 0.2 - 0.3;
       rightArmRef.current.rotation.z = Math.cos(state.clock.elapsedTime * 1.5) * 0.1;
@@ -62,10 +62,17 @@ const HumanoidCharacter = ({ character, onClick, isSelected, isNearby }) => {
       leftArmRef.current.rotation.x = -0.2;
     }
     
-    // Special nearby animation - wave arm when nearby
-    if (isNearby && !isSelected && rightArmRef.current) {
+    // Special nearby animation - wave arm when nearby but not interacting
+    if (isNearby && !isSelected && !isInteracting && rightArmRef.current) {
       rightArmRef.current.rotation.x = Math.sin(state.clock.elapsedTime * 3) * 0.5 - 0.5;
       rightArmRef.current.rotation.z = Math.sin(state.clock.elapsedTime * 3) * 0.2;
+    }
+    
+    // Walking animation when moving
+    if (isMoving && rightArmRef.current && leftArmRef.current) {
+      const walkSpeed = 3;
+      rightArmRef.current.rotation.x = Math.sin(state.clock.elapsedTime * walkSpeed) * 0.4;
+      leftArmRef.current.rotation.x = Math.sin(state.clock.elapsedTime * walkSpeed + Math.PI) * 0.4;
     }
   });
   
@@ -92,6 +99,39 @@ const HumanoidCharacter = ({ character, onClick, isSelected, isNearby }) => {
       onPointerOut={() => setHovered(false)}
       rotation={[0, character.rotation?.[1] || 0, 0]}
     >
+      {/* Status indicators */}
+      {isMoving && (
+        <Text
+          position={[0, 2.3, 0]}
+          color="#7af7ff"
+          fontSize={0.12}
+          maxWidth={2}
+          textAlign="center"
+          anchorY="bottom"
+          outlineWidth={0.01}
+          outlineColor="#000000"
+          lookAt={camera.position}
+        >
+          Moving...
+        </Text>
+      )}
+      
+      {isInteracting && !isSelected && (
+        <Text
+          position={[0, 2.3, 0]}
+          color="#ffaa00"
+          fontSize={0.12}
+          maxWidth={2}
+          textAlign="center"
+          anchorY="bottom"
+          outlineWidth={0.01}
+          outlineColor="#000000"
+          lookAt={camera.position}
+        >
+          Thinking...
+        </Text>
+      )}
+      
       {/* Body */}
       <mesh ref={bodyRef} castShadow position={[0, 0.8, 0]}>
         <capsuleGeometry args={[0.3, 0.8, 4, 8]} />

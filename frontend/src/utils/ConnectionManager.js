@@ -74,6 +74,9 @@ class ConnectionManager {
     }
     
     try {
+      // Show a thinking message in the UI while waiting
+      console.log('Sending request to backend AI service...');
+      
       // Call the backend API - make sure we're using the correct endpoint
       const response = await fetch(`${this.apiBaseUrl}/conversation`, {
         method: 'POST',
@@ -96,6 +99,10 @@ class ConnectionManager {
       const data = await response.json();
       console.log('API response:', data);
       
+      if (!data.success) {
+        throw new Error(data.error || 'Unknown error from API');
+      }
+      
       return { 
         success: true, 
         channel: 'api', 
@@ -111,8 +118,18 @@ class ConnectionManager {
       
       // Fallback to mock response if API is not available
       if (this.useRealApi) {
-        console.log('Falling back to mock response');
-        return this.generateMockResponse(characterId, message);
+        console.log('Falling back to mock response due to API error');
+        
+        return {
+          success: true,
+          channel: 'api',
+          data: {
+            character: this.getCharacterName(characterId),
+            message: `I apologize, but I'm having trouble connecting to my knowledge base at the moment. ${error.message || ''}`,
+            timestamp: new Date().toISOString(),
+            conversationId: conversationId || Math.floor(Math.random() * 1000) // Keep existing ID or create mock
+          }
+        };
       } else {
         return {
           success: false,
@@ -120,6 +137,12 @@ class ConnectionManager {
         };
       }
     }
+  }
+  
+  // Helper method to get character name by ID
+  getCharacterName(characterId) {
+    const character = this.environmentData.characters.find(c => c.id === Number(characterId));
+    return character ? character.name : 'Historical Figure';
   }
   
   // Generate mock responses for testing
@@ -208,9 +231,21 @@ class ConnectionManager {
         throw new Error(errorData.error || `API error: ${response.status}`);
       }
       
-      const conversation = await response.json();
-      console.log('Loaded conversation:', conversation);
-      return conversation;
+      const data = await response.json();
+      console.log('Loaded conversation:', data);
+      
+      // Handle different response formats
+      if (data.success && data.conversation) {
+        // New API format
+        return data.conversation;
+      } else if (data.id) {
+        // Legacy API format - entire response is the conversation
+        return data;
+      } else {
+        // Unexpected format
+        console.error('Unexpected conversation response format:', data);
+        throw new Error('Invalid conversation format received');
+      }
     } catch (error) {
       console.error('Error loading conversation:', error);
       
@@ -220,6 +255,77 @@ class ConnectionManager {
       }
       
       return null;
+    }
+  }
+  
+  // New method to fetch user conversations
+  async getUserConversations(userId) {
+    console.log(`Fetching conversations for user: ${userId}`);
+    
+    if (!this.useRealApi) {
+      console.log('Using mock data for user conversations');
+      return this.generateMockUserConversations(userId);
+    }
+    
+    try {
+      const response = await fetch(`${this.apiBaseUrl}/conversation/user/${userId}`);
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `API error: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      console.log('Loaded user conversations:', data);
+      
+      // Handle different response formats
+      if (data && data.success && Array.isArray(data.conversations)) {
+        // New API format
+        return data.conversations;
+      } else if (Array.isArray(data)) {
+        // Legacy API format
+        return data;
+      } else {
+        // Unexpected format
+        console.error('Unexpected user conversations response format:', data);
+        return [];
+      }
+    } catch (error) {
+      console.error('Error loading user conversations:', error);
+      
+      if (this.useRealApi) {
+        console.log('Falling back to mock user conversations data');
+        return this.generateMockUserConversations(userId);
+      }
+      
+      return [];
+    }
+  }
+  
+  // Generate mock user conversations for testing
+  generateMockUserConversations(userId) {
+    console.log(`Generating mock conversations for user ${userId}`);
+    
+    try {
+      // Generate 3 mock conversations with different characters
+      return this.environmentData.characters.map((character, index) => {
+        return {
+          id: 100 + index,
+          title: `Conversation with ${character.name}`,
+          createdAt: new Date(Date.now() - (86400000 * (index + 1))).toISOString(),
+          updatedAt: new Date(Date.now() - (3600000 * (index + 1))).toISOString(),
+          characterName: character.name,
+          characterId: character.id,
+          characterAvatar: character.avatar,
+          lastMessage: {
+            text: this.generateResponse(character, "Tell me about your work"),
+            createdAt: new Date(Date.now() - (3600000 * (index + 1))).toISOString()
+          }
+        };
+      });
+    } catch (error) {
+      console.error('Error generating mock conversations:', error);
+      return [];
     }
   }
   
@@ -266,7 +372,37 @@ class ConnectionManager {
   
   listenForMessages(callback) {
     console.log('Message listener registered');
-    return () => console.log('Message listener removed');
+    
+    // If using real API, set up websocket listeners for character movements
+    if (this.useRealApi && this.client) {
+      // Listen for character position updates
+      this.client.state.characters.onAdd = (character, key) => {
+        console.log(`Character added: ${character.name} (${key}) at position ${character.position}`);
+      };
+      
+      this.client.state.characters.onChange = (character, key) => {
+        console.log(`Character updated: ${character.name} (${key}) at position ${character.position}`);
+        // Notify the app about character position change
+        if (callback && typeof callback === 'function') {
+          callback({
+            type: 'character_moved',
+            characterId: key,
+            position: character.position,
+            isMoving: character.isMoving,
+            isInteracting: character.isInteracting
+          });
+        }
+      };
+    }
+    
+    return () => {
+      console.log('Message listener removed');
+      // Clean up any websocket listeners
+      if (this.useRealApi && this.client) {
+        this.client.state.characters.onAdd = null;
+        this.client.state.characters.onChange = null;
+      }
+    };
   }
   
   disconnect() {

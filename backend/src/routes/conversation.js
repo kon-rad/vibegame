@@ -1,10 +1,20 @@
 const express = require('express');
 const router = express.Router();
 const AIService = require('../game/AIService');
+const AIAgentService = require('../game/AIAgentService');
 const database = require('../models/database');
 
 // Initialize AIService
 const aiService = new AIService();
+
+// AIAgentService will be initialized by HistoryRoom, but we need a reference to access it
+let aiAgentServiceRef = null;
+
+// Function to set a reference to the AIAgentService instance
+function setAIAgentServiceRef(service) {
+  aiAgentServiceRef = service;
+  console.log('AIAgentService reference set in conversation router');
+}
 
 /**
  * POST /api/conversation
@@ -14,7 +24,10 @@ router.post('/', async (req, res) => {
   const { characterId, message, userId, conversationId } = req.body;
   
   if (!characterId || !message) {
-    return res.status(400).json({ error: 'Character ID and message are required' });
+    return res.status(400).json({ 
+      success: false,
+      error: 'Character ID and message are required' 
+    });
   }
   
   try {
@@ -24,7 +37,10 @@ router.post('/', async (req, res) => {
     const character = await database.getCharacter(characterId);
     
     if (!character) {
-      return res.status(404).json({ error: 'Character not found' });
+      return res.status(404).json({ 
+        success: false,
+        error: 'Character not found' 
+      });
     }
     
     let conversationHistory = [];
@@ -50,11 +66,12 @@ router.post('/', async (req, res) => {
     }
     
     // Save to conversation history
-    const title = conversationId ? null : `Conversation with ${character.name}`;
+    // Note: Passing undefined instead of null for title to avoid Prisma validation error
+    const conversationTitle = conversationId ? undefined : `Conversation with ${character.name}`;
     const savedConversationId = await aiService.addConversationToHistory(
       userId, 
       characterId, 
-      title, 
+      conversationTitle,
       message, 
       response
     );
@@ -195,6 +212,52 @@ router.get('/:conversationId', async (req, res) => {
 });
 
 /**
+ * POST /api/conversation/test-movement
+ * Test endpoint to force AI characters to move randomly
+ */
+router.post('/test-movement', async (req, res) => {
+  try {
+    if (!aiAgentServiceRef) {
+      return res.status(500).json({
+        success: false,
+        error: 'AIAgentService not initialized',
+        message: 'The AI agent service must be initialized before testing movement. Try restarting the server or joining a game room first.'
+      });
+    }
+    
+    console.log('Forcing all AI characters to move randomly');
+    
+    // Force all characters to wander
+    aiAgentServiceRef.forceWanderAll();
+    
+    // Get current character positions for debugging
+    const characterStates = {};
+    for (const characterId in aiAgentServiceRef.characterStates) {
+      const state = aiAgentServiceRef.characterStates[characterId];
+      characterStates[characterId] = {
+        name: state.name,
+        position: state.position,
+        isMoving: state.isMoving,
+        targetPosition: state.targetPosition
+      };
+    }
+    
+    res.json({
+      success: true,
+      message: 'AI characters are now moving',
+      characterStates
+    });
+  } catch (error) {
+    console.error('Error forcing AI movement:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to force AI movement',
+      details: error.message
+    });
+  }
+});
+
+/**
  * PUT /api/conversation/:conversationId/archive
  * Archive a conversation
  */
@@ -241,7 +304,7 @@ router.put('/:conversationId/title', async (req, res) => {
       return res.status(400).json({ error: 'Invalid conversation ID' });
     }
     
-    if (!title || typeof title !== 'string') {
+    if (!title || typeof title !== 'string' || title.trim().length === 0) {
       return res.status(400).json({ error: 'Valid title is required' });
     }
     
@@ -249,7 +312,7 @@ router.put('/:conversationId/title', async (req, res) => {
     
     const updatedConversation = await database.getPrisma().conversation.update({
       where: { id: conversationId },
-      data: { title }
+      data: { title: title.trim() }
     });
     
     res.json({
@@ -268,4 +331,8 @@ router.put('/:conversationId/title', async (req, res) => {
   }
 });
 
-module.exports = router; 
+// Export both the router and the function to set the AIAgentService reference
+module.exports = {
+  router,
+  setAIAgentServiceRef
+}; 

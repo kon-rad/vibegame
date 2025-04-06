@@ -29,61 +29,81 @@ function App() {
     const connection = new ConnectionManager();
     setGameConnection(connection);
     
-    // Wait for environment data to load
-    const checkEnvironmentData = async () => {
-      let retries = 0;
-      const maxRetries = 10;
-      
-      while (retries < maxRetries) {
-        const data = connection.getEnvironmentData();
-        if (data) {
-          setEnvironmentData(data);
-          setCharacters(data.characters || []);
-          setIsLoading(false);
-          return;
-        }
-        
-        retries++;
-        await new Promise(resolve => setTimeout(resolve, 500));
-      }
-      
-      // If we get here, we timed out waiting for data
-      setConnectionError('Failed to load environment data. Please refresh the page.');
-      setIsLoading(false);
-    };
-    
-    checkEnvironmentData();
-    
-    // Try to join the game room
-    const joinRoom = async () => {
+    // Set up connection and message listeners
+    const checkEnvironment = async () => {
       try {
-        const room = await connection.joinGameRoom();
-        if (room) {
-          console.log('Successfully joined game room');
-          
-          // Set up message listener
-          connection.listenForMessages((message) => {
-            console.log('Received message from room:', message);
-            if (message.character && message.message) {
-              setChatMessages(prev => [...prev, { 
-                sender: 'character', 
-                character: message.character,
-                text: message.message 
-              }]);
+        // Attempt to get environment data (characters, etc.)
+        const data = await connection.getEnvironmentData();
+        if (data && data.characters) {
+          setCharacters(data.characters);
+          setIsLoading(false);
+          console.log('Environment data loaded successfully');
+        } else {
+          // Retry if data not available yet
+          let retries = 10;
+          const retryInterval = setInterval(async () => {
+            try {
+              const retryData = await connection.getEnvironmentData();
+              if (retryData && retryData.characters) {
+                setCharacters(retryData.characters);
+                setIsLoading(false);
+                console.log('Environment data loaded on retry');
+                clearInterval(retryInterval);
+              } else {
+                retries--;
+                if (retries <= 0) {
+                  clearInterval(retryInterval);
+                  throw new Error('Failed to load environment data after retries');
+                }
+              }
+            } catch (error) {
+              console.error('Error during retry:', error);
+              clearInterval(retryInterval);
+              setConnectionError('Unable to connect to game server. Please try again later.');
+              setIsLoading(false);
             }
-          });
+          }, 1000);
         }
       } catch (error) {
-        console.error('Failed to join game room:', error);
+        console.error('Error checking environment:', error);
+        setConnectionError('Unable to connect to game server. Please try again later.');
+        setIsLoading(false);
       }
     };
     
-    joinRoom();
+    checkEnvironment();
     
-    return () => {
-      if (connection) {
-        connection.disconnect();
+    // Set up message listener to receive updates
+    const removeListener = connection.listenForMessages((message) => {
+      if (message.type === 'character_moved') {
+        // Update character position in state
+        setCharacters(prevCharacters => {
+          return prevCharacters.map(char => {
+            if (char.id.toString() === message.characterId.toString()) {
+              return {
+                ...char,
+                position: message.position,
+                isMoving: message.isMoving,
+                isInteracting: message.isInteracting
+              };
+            }
+            return char;
+          });
+        });
+      } else {
+        // Handle regular chat messages
+        setChatMessages(prevMessages => [...prevMessages, {
+          sender: message.senderId === 'character' ? 'character' : 'user',
+          text: message.text,
+          timestamp: message.createdAt || new Date().toISOString()
+        }]);
       }
+    });
+    
+    // Clean up on unmount
+    return () => {
+      removeListener && removeListener();
+      connection.disconnect();
     };
   }, []);
 

@@ -27,7 +27,16 @@ class AIService {
     // OpenRouter API settings
     this.openRouterApiUrl = 'https://openrouter.ai/api/v1/chat/completions';
     this.openRouterApiKey = process.env.OPENROUTER_API_KEY;
-    this.defaultModel = process.env.AI_MODEL || 'anthropic/claude-3-sonnet:beta';
+    this.defaultModel = process.env.AI_MODEL || 'openrouter/quasar-alpha';
+    this.fallbackModel = process.env.FALLBACK_AI_MODEL || 'anthropic/claude-3-sonnet';
+    
+    // AI generation settings
+    this.maxTokens = parseInt(process.env.MAX_TOKENS || '512');
+    this.temperature = parseFloat(process.env.TEMPERATURE || '0.7');
+    
+    // Privacy settings
+    this.promptPrivacy = process.env.PROMPT_PRIVACY || 'private';
+    this.responsePrivacy = process.env.RESPONSE_PRIVACY || 'private';
 
     this.initializeCharacters();
   }
@@ -135,8 +144,8 @@ class AIService {
       const requestPayload = {
         model: this.defaultModel,
         messages: messages,
-        max_tokens: 512,
-        temperature: 0.7,
+        max_tokens: this.maxTokens,
+        temperature: this.temperature,
         // Enable private privacy settings to fix the data policy error
         transforms: ["middle-out"],
         route: "fallback",
@@ -167,8 +176,8 @@ class AIService {
             'HTTP-Referer': process.env.APP_DOMAIN || 'https://gameframe.ai',
             'X-Title': 'GameFrame Historical Figures',
             // Privacy headers for OpenRouter
-            'OR-PROMPT-PRIVACY': 'private',
-            'OR-RESPONSE-PRIVACY': 'private'
+            'OR-PROMPT-PRIVACY': this.promptPrivacy,
+            'OR-RESPONSE-PRIVACY': this.responsePrivacy
           }
         }
       );
@@ -200,10 +209,10 @@ class AIService {
           try {
             // Clone the original payload but for the fallback
             const fallbackPayload = {
-              model: 'anthropic/claude-3-sonnet',
+              model: this.fallbackModel,
               messages: messages || [],  // Use the messages from the outer scope
-              max_tokens: 512,
-              temperature: 0.7,
+              max_tokens: this.maxTokens,
+              temperature: this.temperature,
               // Enable private privacy settings
               prompt_training: false,
               response_training: false
@@ -218,8 +227,8 @@ class AIService {
                   'Content-Type': 'application/json',
                   'HTTP-Referer': process.env.APP_DOMAIN || 'https://gameframe.ai',
                   'X-Title': 'GameFrame Historical Figures',
-                  'OR-PROMPT-PRIVACY': 'private',
-                  'OR-RESPONSE-PRIVACY': 'private'
+                  'OR-PROMPT-PRIVACY': this.promptPrivacy,
+                  'OR-RESPONSE-PRIVACY': this.responsePrivacy
                 }
               }
             );
@@ -290,8 +299,11 @@ class AIService {
   // Save conversation to database
   async addConversationToHistory(userId, characterId, title, userMessage, aiResponse) {
     try {
-      // Create or update conversation
-      const conversation = await db.saveConversation(userId, characterId, title);
+      // Create or update conversation with a valid title
+      // Note: title can be undefined but should not be null
+      const conversationTitle = title === null ? undefined : title;
+      
+      const conversation = await db.saveConversation(userId, characterId, conversationTitle);
       
       if (!conversation || !conversation.id) {
         throw new Error('Failed to create conversation record');

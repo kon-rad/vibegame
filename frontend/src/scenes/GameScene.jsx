@@ -240,6 +240,33 @@ const GameScene = ({ characters = FALLBACK_CHARACTERS, onCharacterSelect, isPlay
     }
   }, [camera, isPlayerActive]);
   
+  // Find nearby characters on each frame when player is active
+  useFrame(() => {
+    if (isPlayerActive) {
+      // Check if any character is nearby the player
+      const playerPos = [0, 0, 5]; // Default player position
+      const proximityRange = 2.5;
+      
+      let foundNearbyChar = null;
+      characters.forEach(character => {
+        if (!character.position) return;
+        
+        const distance = Math.sqrt(
+          Math.pow(character.position[0] - playerPos[0], 2) +
+          Math.pow(character.position[2] - playerPos[2], 2)
+        );
+        
+        if (distance < proximityRange) {
+          foundNearbyChar = character;
+        }
+      });
+      
+      if (foundNearbyChar !== nearbyCharacter) {
+        setNearbyCharacter(foundNearbyChar);
+      }
+    }
+  });
+  
   return (
     <group>
       {/* Environment (sky, ground, trees, etc.) */}
@@ -261,6 +288,8 @@ const GameScene = ({ characters = FALLBACK_CHARACTERS, onCharacterSelect, isPlay
           onClick={handleCharacterClick}
           isSelected={selectedCharacter && selectedCharacter.id === character.id}
           isNearby={nearbyCharacter && nearbyCharacter.id === character.id}
+          isMoving={character.isMoving}
+          isInteracting={character.isInteracting}
         />
       ))}
       

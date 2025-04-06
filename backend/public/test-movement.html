@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Character Movement Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        h1 {
+            color: #333;
+            border-bottom: 1px solid #ddd;
+            padding-bottom: 10px;
+        }
+        .button-container {
+            margin: 20px 0;
+        }
+        button {
+            background-color: #4CAF50;
+            border: none;
+            color: white;
+            padding: 10px 20px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 16px;
+            margin: 4px 2px;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        pre {
+            background-color: #f5f5f5;
+            border: 1px solid #ddd;
+            padding: 10px;
+            overflow: auto;
+            max-height: 400px;
+        }
+        #status {
+            margin-top: 20px;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        .success {
+            background-color: #dff0d8;
+            border: 1px solid #d6e9c6;
+            color: #3c763d;
+        }
+        .error {
+            background-color: #f2dede;
+            border: 1px solid #ebccd1;
+            color: #a94442;
+        }
+    </style>
+</head>
+<body>
+    <h1>AI Character Movement Test</h1>
+    
+    <p>This page allows you to test the AI character movement functionality. Click the button below to force all AI characters to move to random positions.</p>
+    
+    <div class="button-container">
+        <button id="testMovementBtn">Test Movement</button>
+    </div>
+    
+    <div id="status" style="display: none;"></div>
+    
+    <h2>Response:</h2>
+    <pre id="response">No response yet...</pre>
+    
+    <h2>Instructions:</h2>
+    <ol>
+        <li>Make sure the server is running</li>
+        <li>First, open the 3D application to initialize the game room</li>
+        <li>Then click the "Test Movement" button to make characters move</li>
+        <li>Check the server console for movement logs</li>
+        <li>Observe the characters' movement in the 3D environment</li>
+    </ol>
+    
+    <p>Note: If the characters don't move, try refreshing the 3D application page and then clicking the button again.</p>
+    
+    <script>
+        document.getElementById('testMovementBtn').addEventListener('click', async function() {
+            const button = this;
+            const statusDiv = document.getElementById('status');
+            const responseDiv = document.getElementById('response');
+            
+            // Disable button during request
+            button.disabled = true;
+            button.textContent = 'Testing...';
+            
+            try {
+                // Make a POST request to the test-movement endpoint
+                const response = await fetch('/api/conversation/test-movement', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({})
+                });
+                
+                const data = await response.json();
+                
+                // Display response
+                responseDiv.textContent = JSON.stringify(data, null, 2);
+                
+                // Update status
+                statusDiv.className = data.success ? 'success' : 'error';
+                statusDiv.textContent = data.success ? 'Success! Characters are now moving.' : 'Error: ' + data.error;
+                statusDiv.style.display = 'block';
+                
+            } catch (error) {
+                console.error('Error testing movement:', error);
+                
+                // Update status
+                statusDiv.className = 'error';
+                statusDiv.textContent = 'Error: Failed to connect to the server. Make sure it is running.';
+                statusDiv.style.display = 'block';
+                
+                // Display error
+                responseDiv.textContent = error.toString();
+            }
+            
+            // Re-enable button
+            button.disabled = false;
+            button.textContent = 'Test Movement';
+        });
+    </script>
+</body>
+</html> 
