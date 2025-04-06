@@ -8,8 +8,15 @@ if (!fs.existsSync(dataDir)) {
   fs.mkdirSync(dataDir, { recursive: true });
 }
 
-// Initialize Prisma client
-const prisma = new PrismaClient();
+// Initialize Prisma client with required configuration
+const prisma = new PrismaClient({
+  // Add required configuration to fix initialization error
+  __internal: {
+    enableExperimentalDrivers: true,
+    // This is the missing field that caused the error
+    enableTracing: false
+  }
+});
 
 // Seed database with default characters if needed
 async function initializeCharacters() {

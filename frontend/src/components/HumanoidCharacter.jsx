@@ -4,7 +4,7 @@ import { Text, Html } from '@react-three/drei';
 import * as THREE from 'three';
 
 // Basic humanoid character representation
-const HumanoidCharacter = ({ character, onClick, isSelected }) => {
+const HumanoidCharacter = ({ character, onClick, isSelected, isNearby }) => {
   const { camera } = useThree();
   const group = useRef();
   const bodyRef = useRef();
@@ -36,6 +36,15 @@ const HumanoidCharacter = ({ character, onClick, isSelected }) => {
     // Head movement - looking around slightly
     if (headRef.current) {
       headRef.current.rotation.y = Math.sin(state.clock.elapsedTime * 0.5) * 0.2;
+      
+      // If nearby, make the character look at the player
+      if (isNearby) {
+        const lookAtPlayer = new THREE.Vector3(0, 1.5, 5); // Approximate player position
+        headRef.current.lookAt(lookAtPlayer);
+        // Limit rotation to avoid unnatural angles
+        headRef.current.rotation.x = Math.max(-0.3, Math.min(0.3, headRef.current.rotation.x));
+        headRef.current.rotation.y = Math.max(-0.8, Math.min(0.8, headRef.current.rotation.y));
+      }
     }
     
     // Arm movement for selected character (talking animation)
@@ -52,6 +61,12 @@ const HumanoidCharacter = ({ character, onClick, isSelected }) => {
       rightArmRef.current.rotation.z = 0.1;
       leftArmRef.current.rotation.x = -0.2;
     }
+    
+    // Special nearby animation - wave arm when nearby
+    if (isNearby && !isSelected && rightArmRef.current) {
+      rightArmRef.current.rotation.x = Math.sin(state.clock.elapsedTime * 3) * 0.5 - 0.5;
+      rightArmRef.current.rotation.z = Math.sin(state.clock.elapsedTime * 3) * 0.2;
+    }
   });
   
   // Apply selection effects
@@ -65,13 +80,17 @@ const HumanoidCharacter = ({ character, onClick, isSelected }) => {
     }
   }, [isSelected, clothesColor, highlightColor]);
   
+  // Determine if character can be interacted with (nearby or selected)
+  const isInteractable = isNearby || isSelected;
+  
   return (
     <group 
       ref={group} 
       position={[character.position[0], character.position[1], character.position[2]]}
-      onClick={() => onClick(character)}
+      onClick={() => isInteractable && onClick(character)}
       onPointerOver={() => setHovered(true)}
       onPointerOut={() => setHovered(false)}
+      rotation={[0, character.rotation?.[1] || 0, 0]}
     >
       {/* Body */}
       <mesh ref={bodyRef} castShadow position={[0, 0.8, 0]}>
@@ -145,7 +164,7 @@ const HumanoidCharacter = ({ character, onClick, isSelected }) => {
       {/* Character name label */}
       <Text
         position={[0, 2.1, 0]}
-        color="white"
+        color={isNearby ? "#ffdd00" : "white"}
         fontSize={0.2}
         maxWidth={2}
         textAlign="center"
@@ -158,7 +177,7 @@ const HumanoidCharacter = ({ character, onClick, isSelected }) => {
       </Text>
       
       {/* Era information shown on hover */}
-      {(hovered || isSelected) && (
+      {(hovered || isSelected || isNearby) && (
         <Text
           position={[0, 1.9, 0]}
           color="#aaaaff"
@@ -180,6 +199,31 @@ const HumanoidCharacter = ({ character, onClick, isSelected }) => {
           <ringGeometry args={[0.6, 0.7, 32]} />
           <meshBasicMaterial color="gold" />
         </mesh>
+      )}
+      
+      {/* Nearby indicator - shows when the player is close enough to interact */}
+      {isNearby && !isSelected && (
+        <mesh position={[0, -0.4, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+          <ringGeometry args={[0.6, 0.7, 32]} />
+          <meshBasicMaterial color="#ffdd00" transparent opacity={0.7} />
+        </mesh>
+      )}
+      
+      {/* Interaction hint when nearby */}
+      {isNearby && !isSelected && (
+        <Text
+          position={[0, 2.3, 0]}
+          color="#ffffff"
+          fontSize={0.12}
+          maxWidth={2}
+          textAlign="center"
+          anchorY="bottom"
+          outlineWidth={0.01}
+          outlineColor="#000000"
+          lookAt={camera.position}
+        >
+          Click to talk
+        </Text>
       )}
     </group>
   );

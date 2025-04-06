@@ -4,10 +4,14 @@ import { OrbitControls, Stars, Preload, Html } from '@react-three/drei';
 import GameScene from './scenes/GameScene';
 import ChatInterface from './components/ChatInterface';
 import LoadingScreen from './components/LoadingScreen';
+import IntroScreen from './components/IntroScreen';
+import ConversationsModal from './components/ConversationsModal';
 import ConnectionManager from './utils/ConnectionManager';
 
 function App() {
   const [isLoading, setIsLoading] = useState(true);
+  const [showIntro, setShowIntro] = useState(true);
+  const [gameStarted, setGameStarted] = useState(false);
   const [gameConnection, setGameConnection] = useState(null);
   const [currentCharacter, setCurrentCharacter] = useState(null);
   const [chatMessages, setChatMessages] = useState([]);
@@ -15,6 +19,10 @@ function App() {
   const [environmentData, setEnvironmentData] = useState(null);
   const [characters, setCharacters] = useState([]);
   const [connectionError, setConnectionError] = useState(null);
+  const [tokensCollected, setTokensCollected] = useState(0);
+  const [userId, setUserId] = useState(1); // Mock user ID - in a real app, get from auth
+  const [showConversations, setShowConversations] = useState(false);
+  const [activeConversationId, setActiveConversationId] = useState(null);
 
   useEffect(() => {
     // Initialize connection to game server
@@ -94,19 +102,40 @@ function App() {
     
     // Send message to server
     try {
-      const result = await gameConnection.sendMessage(currentCharacter.id, message);
+      const result = await gameConnection.sendMessage(
+        currentCharacter.id, 
+        message,
+        userId,
+        activeConversationId
+      );
       
       // Remove typing indicator
       setChatMessages(prev => prev.filter(msg => !msg.isTyping));
       
       if (result.success) {
         if (result.channel === 'api' && result.data) {
+          // Update conversation ID if it's a new conversation
+          if (result.data.conversationId) {
+            setActiveConversationId(result.data.conversationId);
+          }
+          
           // Add response from API
           setChatMessages(prev => [...prev, { 
             sender: 'character', 
             character: result.data.character,
             text: result.data.message 
           }]);
+          
+          // Check if token was earned (this would come from backend in real implementation)
+          if (result.data.message.toLowerCase().includes('token') && 
+              Math.random() > 0.7) { // Simulating token earning chance
+            setTokensCollected(prev => prev + 1);
+            setChatMessages(prev => [...prev, { 
+              sender: 'system', 
+              text: `Congratulations! You earned a token from ${result.data.character}!`,
+              isToken: true
+            }]);
+          }
         }
         // If using colyseus, the response will come through the message listener
       } else {
@@ -127,6 +156,55 @@ function App() {
         sender: 'system', 
         text: 'Error: Could not send message. Please try again.' 
       }]);
+    }
+  };
+
+  const handleStartGame = () => {
+    setShowIntro(false);
+    setGameStarted(true);
+  };
+
+  const handleCharacterSelect = (character) => {
+    setCurrentCharacter(character);
+    setChatMessages([]);
+    setActiveConversationId(null);
+  };
+
+  const loadConversation = async (conversationId) => {
+    if (!gameConnection) return;
+    
+    try {
+      const conversation = await gameConnection.loadConversation(conversationId);
+      
+      if (!conversation) {
+        throw new Error('Failed to load conversation');
+      }
+      
+      // Find the character
+      const character = characters.find(c => c.id === conversation.character.id);
+      if (character) {
+        setCurrentCharacter(character);
+      }
+      
+      // Format messages for chat display
+      const formattedMessages = conversation.messages.map(msg => ({
+        sender: msg.senderType === 'user' ? 'user' : 'character',
+        text: msg.text,
+        character: msg.senderType === 'character' ? conversation.character.name : null
+      }));
+      
+      // Set active conversation and messages
+      setActiveConversationId(conversationId);
+      setChatMessages(formattedMessages);
+      
+    } catch (error) {
+      console.error('Error loading conversation:', error);
+      setChatMessages([
+        { 
+          sender: 'system', 
+          text: 'Error: Could not load conversation. Please try again.' 
+        }
+      ]);
     }
   };
 
@@ -175,6 +253,8 @@ function App() {
 
   return (
     <div className="app-container">
+      {showIntro && <IntroScreen onStart={handleStartGame} />}
+      
       <Canvas 
         shadows 
         dpr={[1, 2]} 
@@ -209,18 +289,21 @@ function App() {
         }>
           <GameScene 
             characters={characters}
-            onCharacterSelect={setCurrentCharacter} 
+            onCharacterSelect={handleCharacterSelect}
+            isPlayerActive={gameStarted}
           />
           <Preload all />
         </Suspense>
         
         <Stars radius={100} depth={50} count={5000} factor={4} />
-        <OrbitControls 
-          enablePan={false}
-          minDistance={3}
-          maxDistance={20}
-          maxPolarAngle={Math.PI / 2 - 0.1}
-        />
+        {!gameStarted && (
+          <OrbitControls 
+            enablePan={false}
+            minDistance={3}
+            maxDistance={20}
+            maxPolarAngle={Math.PI / 2 - 0.1}
+          />
+        )}
       </Canvas>
       
       {currentCharacter && (
@@ -231,10 +314,39 @@ function App() {
         />
       )}
       
-      <div className="app-info">
-        <h1>Historical Conversations</h1>
-        <p>Interact with historical figures in a 3D environment</p>
-      </div>
+      {gameStarted && (
+        <>
+          <div className="app-info">
+            <h1>Historical Tokens</h1>
+            <p>Interact with historical figures and collect their tokens</p>
+          </div>
+          
+          <div className="token-counter">
+            <span className="token-icon">🪙</span>
+            <span className="token-count">{tokensCollected}</span>
+          </div>
+          
+          <button 
+            className="conversations-button"
+            onClick={() => setShowConversations(true)}
+          >
+            <span>💬</span>
+            My Conversations
+          </button>
+          
+          <div className="controls-hint">
+            <p>WASD: Move | Mouse: Look | Click: Interact</p>
+          </div>
+        </>
+      )}
+      
+      {showConversations && (
+        <ConversationsModal 
+          userId={userId}
+          onSelectConversation={loadConversation}
+          onClose={() => setShowConversations(false)}
+        />
+      )}
       
       <style jsx>{`
         .app-container {
@@ -261,6 +373,73 @@ function App() {
         .app-info p {
           margin: 5px 0 0;
           opacity: 0.8;
+        }
+        
+        .token-counter {
+          position: absolute;
+          top: 20px;
+          right: 20px;
+          background: rgba(0, 0, 0, 0.5);
+          color: gold;
+          padding: 8px 15px;
+          border-radius: 20px;
+          display: flex;
+          align-items: center;
+          font-weight: bold;
+          font-size: 1.2em;
+          box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+        }
+        
+        .token-icon {
+          margin-right: 8px;
+          font-size: 1.4em;
+        }
+        
+        .conversations-button {
+          position: absolute;
+          top: 80px;
+          right: 20px;
+          background: rgba(30, 50, 100, 0.8);
+          color: white;
+          border: none;
+          padding: 10px 15px;
+          border-radius: 20px;
+          font-weight: bold;
+          display: flex;
+          align-items: center;
+          cursor: pointer;
+          transition: background 0.2s ease;
+          box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+          font-size: 0.9em;
+        }
+        
+        .conversations-button:hover {
+          background: rgba(40, 70, 150, 0.9);
+        }
+        
+        .conversations-button span {
+          margin-right: 8px;
+          font-size: 1.2em;
+        }
+        
+        .controls-hint {
+          position: absolute;
+          bottom: 20px;
+          left: 50%;
+          transform: translateX(-50%);
+          background: rgba(0, 0, 0, 0.5);
+          color: white;
+          padding: 10px 20px;
+          border-radius: 5px;
+          text-align: center;
+          pointer-events: none;
+          opacity: 0.8;
+          transition: opacity 0.5s ease;
+        }
+        
+        .controls-hint p {
+          margin: 0;
+          font-size: 1rem;
         }
       `}</style>
     </div>
