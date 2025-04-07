@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, forwardRef, useImperativeHandle } from 'react';
 import { useThree, useFrame } from '@react-three/fiber';
 import { Text } from '@react-three/drei';
 import * as THREE from 'three';
@@ -45,8 +45,8 @@ const FALLBACK_CHARACTERS = [
   }
 ];
 
-// Player controller component
-const PlayerController = ({ isActive, onNearCharacter }) => {
+// Player controller component - Modified to use forwardRef and accept onPlayerMove
+const PlayerController = forwardRef(({ isActive, onPlayerMove }, ref) => {
   const playerRef = useRef();
   const { camera } = useThree();
   const [movement, setMovement] = useState({
@@ -55,46 +55,35 @@ const PlayerController = ({ isActive, onNearCharacter }) => {
     left: false,
     right: false
   });
+  const moveSpeed = 5; // Player movement speed (units per second)
+  const cameraOffset = useRef(new THREE.Vector3(0, 3, 5)); // Initial camera offset
+
+  // Expose player position via ref
+  useImperativeHandle(ref, () => ({
+    getPosition: () => playerRef.current ? playerRef.current.position.toArray() : [0, 0, 5]
+  }));
   
-  // Set up keyboard listeners
+  // Keyboard listeners
   useEffect(() => {
     if (!isActive) return;
     
     const handleKeyDown = (e) => {
       switch (e.code) {
-        case 'KeyW':
-          setMovement(prev => ({ ...prev, forward: true }));
-          break;
-        case 'KeyS':
-          setMovement(prev => ({ ...prev, backward: true }));
-          break;
-        case 'KeyA':
-          setMovement(prev => ({ ...prev, left: true }));
-          break;
-        case 'KeyD':
-          setMovement(prev => ({ ...prev, right: true }));
-          break;
-        default:
-          break;
+        case 'KeyW': case 'ArrowUp': setMovement(prev => ({ ...prev, forward: true })); break;
+        case 'KeyS': case 'ArrowDown': setMovement(prev => ({ ...prev, backward: true })); break;
+        case 'KeyA': case 'ArrowLeft': setMovement(prev => ({ ...prev, left: true })); break;
+        case 'KeyD': case 'ArrowRight': setMovement(prev => ({ ...prev, right: true })); break;
+        default: break;
       }
     };
     
     const handleKeyUp = (e) => {
       switch (e.code) {
-        case 'KeyW':
-          setMovement(prev => ({ ...prev, forward: false }));
-          break;
-        case 'KeyS':
-          setMovement(prev => ({ ...prev, backward: false }));
-          break;
-        case 'KeyA':
-          setMovement(prev => ({ ...prev, left: false }));
-          break;
-        case 'KeyD':
-          setMovement(prev => ({ ...prev, right: false }));
-          break;
-        default:
-          break;
+        case 'KeyW': case 'ArrowUp': setMovement(prev => ({ ...prev, forward: false })); break;
+        case 'KeyS': case 'ArrowDown': setMovement(prev => ({ ...prev, backward: false })); break;
+        case 'KeyA': case 'ArrowLeft': setMovement(prev => ({ ...prev, left: false })); break;
+        case 'KeyD': case 'ArrowRight': setMovement(prev => ({ ...prev, right: false })); break;
+        default: break;
       }
     };
     
@@ -111,79 +100,46 @@ const PlayerController = ({ isActive, onNearCharacter }) => {
   useFrame((state, delta) => {
     if (!isActive || !playerRef.current) return;
     
-    const moveSpeed = 0.1;
+    const player = playerRef.current;
     let moved = false;
     
-    // Direction vector for movement
-    const direction = new THREE.Vector3();
-    
-    // Get camera direction
+    const moveDirection = new THREE.Vector3();
     const cameraDirection = new THREE.Vector3();
     camera.getWorldDirection(cameraDirection);
-    cameraDirection.y = 0; // Keep movement on horizontal plane
+    cameraDirection.y = 0;
     cameraDirection.normalize();
-    
-    // Calculate camera right vector
+
     const cameraRight = new THREE.Vector3();
-    cameraRight.crossVectors(new THREE.Vector3(0, 1, 0), cameraDirection).normalize();
-    
-    // Apply movement inputs
-    if (movement.forward) {
-      direction.add(cameraDirection);
-      moved = true;
-    }
-    if (movement.backward) {
-      direction.sub(cameraDirection);
-      moved = true;
-    }
-    if (movement.left) {
-      direction.add(cameraRight);
-      moved = true;
-    }
-    if (movement.right) {
-      direction.sub(cameraRight);
-      moved = true;
-    }
-    
-    // Move player if any keys are pressed
+    cameraRight.crossVectors(camera.up, cameraDirection).normalize();
+
+    if (movement.forward) { moveDirection.add(cameraDirection); moved = true; }
+    if (movement.backward) { moveDirection.sub(cameraDirection); moved = true; }
+    if (movement.left) { moveDirection.add(cameraRight); moved = true; }
+    if (movement.right) { moveDirection.sub(cameraRight); moved = true; }
+
     if (moved) {
-      direction.normalize();
+      moveDirection.normalize();
+      const moveVector = moveDirection.multiplyScalar(moveSpeed * delta);
+      player.position.add(moveVector);
+
+      // Rotate player model to face movement direction
+      const targetRotation = Math.atan2(moveDirection.x, moveDirection.z);
+      player.rotation.y = THREE.MathUtils.lerp(player.rotation.y, targetRotation, 0.15);
       
-      // Update position
-      playerRef.current.position.x += direction.x * moveSpeed;
-      playerRef.current.position.z += direction.z * moveSpeed;
-      
-      // Update player rotation to face movement direction
-      if (direction.length() > 0) {
-        const targetRotation = Math.atan2(direction.x, direction.z);
-        playerRef.current.rotation.y = targetRotation;
-      }
-      
-      // Update camera position to follow player
-      camera.position.x = playerRef.current.position.x;
-      camera.position.z = playerRef.current.position.z + 5;
-      camera.lookAt(playerRef.current.position.x, 0.5, playerRef.current.position.z);
-      
-      // Check proximity to characters for interaction
-      if (onNearCharacter) {
-        // Find characters in proximity
-        const proximityRange = 2.5; // units
-        FALLBACK_CHARACTERS.forEach(character => {
-          const distance = Math.sqrt(
-            Math.pow(character.position[0] - playerRef.current.position.x, 2) +
-            Math.pow(character.position[2] - playerRef.current.position.z, 2)
-          );
-          
-          if (distance < proximityRange) {
-            onNearCharacter(character);
-          }
-        });
+      // Update parent component with new position
+      if (onPlayerMove) {
+        onPlayerMove(player.position.toArray());
       }
     }
+
+    // Update camera position smoothly
+    const targetCameraPosition = player.position.clone().add(cameraOffset.current);
+    camera.position.lerp(targetCameraPosition, 0.1);
+    camera.lookAt(player.position.x, player.position.y + 0.5, player.position.z);
   });
   
   return (
-    <group ref={playerRef} position={[0, 0, 5]}>
+    <group ref={playerRef} position={[0, 0, 5]} className="player-controller">
       {/* Simple player model */}
       <mesh castShadow position={[0, 0.7, 0]}>
         <capsuleGeometry args={[0.3, 1, 16, 16]} />
@@ -194,74 +150,69 @@ const PlayerController = ({ isActive, onNearCharacter }) => {
         <meshStandardMaterial color="#f5deb3" />
       </mesh>
       {/* Eyes for direction */}
-      <mesh position={[0.1, 1.6, 0.18]}>
+      <mesh position={[0.1, 1.6, 0.2]}> {/* Slightly adjusted eye position */}
         <sphereGeometry args={[0.06, 8, 8]} />
         <meshBasicMaterial color="#000000" />
       </mesh>
-      <mesh position={[-0.1, 1.6, 0.18]}>
+      <mesh position={[-0.1, 1.6, 0.2]}> {/* Slightly adjusted eye position */}
         <sphereGeometry args={[0.06, 8, 8]} />
         <meshBasicMaterial color="#000000" />
       </mesh>
     </group>
   );
-};
+});
 
 // Main game scene component
-const GameScene = ({ characters = FALLBACK_CHARACTERS, onCharacterSelect, isPlayerActive = false }) => {
+const GameScene = ({ characters = FALLBACK_CHARACTERS, onCharacterSelect, isPlayerActive = false, onPlayerMove }) => {
   const [selectedCharacter, setSelectedCharacter] = useState(null);
   const [nearbyCharacter, setNearbyCharacter] = useState(null);
   const { camera } = useThree();
+  const playerControllerRef = useRef(null); // Ref for the PlayerController component
   
   // Handle character selection
   const handleCharacterClick = (character) => {
+    console.log('Character clicked:', character.name);
     setSelectedCharacter(character);
     if (onCharacterSelect) {
       onCharacterSelect(character);
     }
   };
   
-  // Handle being near a character
-  const handleNearCharacter = (character) => {
-    setNearbyCharacter(character);
-  };
-  
-  // Reset camera on mount and when player state changes
+  // Camera setup effect
   useEffect(() => {
     if (camera) {
       if (!isPlayerActive) {
-        // Default camera position when not playing
         camera.position.set(0, 5, 10);
         camera.lookAt(0, 0, 0);
       } else {
-        // Initial camera position for player controls
-        camera.position.set(0, 2, 10);
-        camera.lookAt(0, 0, 5);
+        // Set initial camera relative to player start position
+        camera.position.set(0, 3, 10); // Slightly adjusted start
+        camera.lookAt(0, 0.5, 5);
       }
     }
   }, [camera, isPlayerActive]);
   
-  // Find nearby characters on each frame when player is active
+  // Find nearby characters (less critical now, could be used for UI hints)
   useFrame(() => {
-    if (isPlayerActive) {
-      // Check if any character is nearby the player
-      const playerPos = [0, 0, 5]; // Default player position
-      const proximityRange = 2.5;
-      
+    if (isPlayerActive && playerControllerRef.current) {
+      const proximityRange = 3.5;
       let foundNearbyChar = null;
-      characters.forEach(character => {
-        if (!character.position) return;
-        
-        const distance = Math.sqrt(
-          Math.pow(character.position[0] - playerPos[0], 2) +
-          Math.pow(character.position[2] - playerPos[2], 2)
-        );
-        
-        if (distance < proximityRange) {
-          foundNearbyChar = character;
-        }
-      });
+      const playerPosArray = playerControllerRef.current.getPosition();
+      const playerPos = new THREE.Vector3().fromArray(playerPosArray);
+
+      if (characters && characters.length > 0) {
+        characters.forEach(character => {
+          if (!character.position) return;
+          const charPos = new THREE.Vector3().fromArray(character.position);
+          const distance = playerPos.distanceTo(charPos);
+          
+          if (distance < proximityRange) {
+            foundNearbyChar = character;
+          }
+        });
+      }
       
-      if (foundNearbyChar !== nearbyCharacter) {
+      if (foundNearbyChar?.id !== (nearbyCharacter?.id || null)) {
         setNearbyCharacter(foundNearbyChar);
       }
     }
@@ -269,25 +220,25 @@ const GameScene = ({ characters = FALLBACK_CHARACTERS, onCharacterSelect, isPlay
   
   return (
     <group>
-      {/* Environment (sky, ground, trees, etc.) */}
       <Environment />
       
-      {/* Player character (only visible when active) */}
+      {/* Player character with ref and onPlayerMove callback */}
       {isPlayerActive && (
         <PlayerController 
+          ref={playerControllerRef} // Attach ref
           isActive={isPlayerActive} 
-          onNearCharacter={handleNearCharacter} 
+          onPlayerMove={onPlayerMove} // Pass callback
         />
       )}
       
-      {/* Historical characters as humanoid avatars */}
+      {/* Historical characters */}
       {characters.map((character) => (
         <HumanoidCharacter 
           key={character.id}
           character={character}
           onClick={handleCharacterClick}
           isSelected={selectedCharacter && selectedCharacter.id === character.id}
-          isNearby={nearbyCharacter && nearbyCharacter.id === character.id}
+          isNearby={nearbyCharacter && nearbyCharacter.id === character.id} // Still useful for highlight
           isMoving={character.isMoving}
           isInteracting={character.isInteracting}
         />
@@ -308,19 +259,20 @@ const GameScene = ({ characters = FALLBACK_CHARACTERS, onCharacterSelect, isPlay
         </Text>
       )}
       
-      {/* Interaction hint */}
+      {/* Interaction hint using nearbyCharacter state */}
       {isPlayerActive && nearbyCharacter && (
         <Text
-          position={[0, 3, 0]}
+          position={[nearbyCharacter.position[0], nearbyCharacter.position[1] + 2.5, nearbyCharacter.position[2]]} // Position above the character
           color="#ffdd00"
           fontSize={0.3}
-          maxWidth={10}
+          maxWidth={5}
           textAlign="center"
+          anchorY="bottom"
           outlineWidth={0.02}
           outlineColor="#000000"
-          rotation={[0, Math.PI, 0]}
+          billboard // Make text face the camera
         >
-          Click on {nearbyCharacter.name} to start a conversation
+          Click on {nearbyCharacter.name} to talk
         </Text>
       )}
     </group>

@@ -180,6 +180,73 @@ const database = {
     }
   },
   
+  // Add a character thought or action
+  addCharacterThought: async (characterId, type, content, position = null, metadata = null) => {
+    try {
+      const thought = await prisma.characterThought.create({
+        data: {
+          characterId: Number(characterId),
+          type,
+          content,
+          position: position ? JSON.stringify(position) : null,
+          metadata: metadata ? JSON.stringify(metadata) : null
+        }
+      });
+      
+      return { id: thought.id };
+    } catch (error) {
+      console.error('Error adding character thought:', error);
+      throw error;
+    }
+  },
+  
+  // Get thoughts for a specific character
+  getCharacterThoughts: async (characterId, type = null, limit = 100) => {
+    try {
+      const whereClause = {
+        characterId: Number(characterId)
+      };
+      
+      // Filter by type if provided
+      if (type) {
+        whereClause.type = type;
+      }
+      
+      return await prisma.characterThought.findMany({
+        where: whereClause,
+        orderBy: {
+          createdAt: 'desc'
+        },
+        take: limit
+      });
+    } catch (error) {
+      console.error(`Error getting thoughts for character ${characterId}:`, error);
+      return [];
+    }
+  },
+  
+  // Get all character thoughts sorted by recency
+  getAllCharacterThoughts: async (limit = 100) => {
+    try {
+      return await prisma.characterThought.findMany({
+        orderBy: {
+          createdAt: 'desc'
+        },
+        take: limit,
+        include: {
+          character: {
+            select: {
+              name: true
+            }
+          }
+        }
+      });
+    } catch (error) {
+      console.error('Error getting all character thoughts:', error);
+      return [];
+    }
+  },
+  
   // Close database connection
   close: async () => {
     try {

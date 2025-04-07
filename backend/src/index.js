@@ -10,6 +10,7 @@ const path = require('path');
 // Import routes
 const environmentRoutes = require('./routes/environment');
 const { router: conversationRoutes } = require('./routes/conversation');
+const characterRoutes = require('./routes/character');
 
 // Import room handlers
 const { HistoryRoom } = require('./game/HistoryRoom');
@@ -22,7 +23,11 @@ const app = express();
 const server = http.createServer(app);
 
 // Configure middleware
-app.use(cors());
+app.use(cors({
+  origin: '*', // Allow all origins
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
 app.use(express.json());
 
 // Static files
@@ -36,6 +41,7 @@ if (process.env.NODE_ENV === 'production') {
 // API routes
 app.use('/api/environment', environmentRoutes);
 app.use('/api/conversation', conversationRoutes);
+app.use('/api/character', characterRoutes);
 
 // Server info endpoint
 app.get('/api/status', (req, res) => {

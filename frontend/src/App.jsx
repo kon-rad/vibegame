@@ -1,4 +1,4 @@
-import React, { useState, useEffect, Suspense } from 'react';
+import React, { useState, useEffect, Suspense, useCallback } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls, Stars, Preload, Html } from '@react-three/drei';
 import GameScene from './scenes/GameScene';
@@ -6,6 +6,7 @@ import ChatInterface from './components/ChatInterface';
 import LoadingScreen from './components/LoadingScreen';
 import IntroScreen from './components/IntroScreen';
 import ConversationsModal from './components/ConversationsModal';
+import Minimap from './components/Minimap';
 import ConnectionManager from './utils/ConnectionManager';
 
 function App() {
@@ -20,6 +21,7 @@ function App() {
   const [characters, setCharacters] = useState([]);
   const [connectionError, setConnectionError] = useState(null);
   const [tokensCollected, setTokensCollected] = useState(0);
+  const [playerPosition, setPlayerPosition] = useState([0, 0, 5]);
   const [userId, setUserId] = useState(1); // Mock user ID - in a real app, get from auth
   const [showConversations, setShowConversations] = useState(false);
   const [activeConversationId, setActiveConversationId] = useState(null);
@@ -228,6 +230,13 @@ function App() {
     }
   };
 
+  // Callback to receive player position updates from GameScene
+  const handlePlayerMove = useCallback((newPosition) => {
+    setPlayerPosition(newPosition);
+    // Optionally, send position to backend if needed for Colyseus
+    // gameConnection?.sendPlayerPosition(newPosition);
+  }, [gameConnection]);
+
   if (isLoading) {
     return <LoadingScreen />;
   }
@@ -311,6 +320,7 @@ function App() {
             characters={characters}
             onCharacterSelect={handleCharacterSelect}
             isPlayerActive={gameStarted}
+            onPlayerMove={handlePlayerMove}
           />
           <Preload all />
         </Suspense>
@@ -353,6 +363,13 @@ function App() {
             <span>💬</span>
             My Conversations
           </button>
+          
+          <Minimap 
+            playerPosition={playerPosition} 
+            characters={characters} 
+            worldSize={50}
+            mapSize={150}
+          />
           
           <div className="controls-hint">
             <p>WASD: Move | Mouse: Look | Click: Interact</p>

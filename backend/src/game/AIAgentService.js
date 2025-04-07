@@ -289,6 +289,14 @@ class AIAgentService {
       const nearbyPlayers = this.getNearbyPlayers(characterId);
       console.log(`[AIAgentService] Character ${characterId} detected ${nearbyPlayers.length} nearby players`);
       
+      // Log character thought about surroundings
+      await db.addCharacterThought(
+        characterId,
+        'thought',
+        `I see ${nearbyPlayers.length} people around me. ${nearbyPlayers.length > 0 ? 'I should interact with someone.' : 'I should explore the area.'}`,
+        charState.position
+      );
+      
       // Simple decision making logic:
       // 1. If there are players nearby, approach the closest one
       // 2. If no players nearby, wander to a random position
@@ -298,10 +306,26 @@ class AIAgentService {
         
         console.log(`[AIAgentService] Character ${characterId} (${charState.name}) detected player ${closestPlayer.id} at distance ${closestPlayer.distance.toFixed(2)}`);
         
+        // Log character thought about player
+        await db.addCharacterThought(
+          characterId,
+          'thought',
+          `I notice a person (${closestPlayer.id}) ${closestPlayer.distance.toFixed(1)} units away from me.`,
+          charState.position
+        );
+        
         // If player is very close, initiate conversation
         if (closestPlayer.distance < this.interactionDistance) {
           // Create a character-specific greeting
           const greeting = this.generateGreeting(characterId);
+          
+          // Log character action
+          await db.addCharacterThought(
+            characterId,
+            'action',
+            `Initiating conversation with player ${closestPlayer.id} with greeting: "${greeting}"`,
+            charState.position
+          );
           
           await worker.functions.find(f => f.name === "initiate_conversation").executable({
             playerId: closestPlayer.id,
@@ -310,11 +334,19 @@ class AIAgentService {
         } 
         // Otherwise, approach the player
         else {
+          // Log character action
+          await db.addCharacterThought(
+            characterId,
+            'action',
+            `Approaching player ${closestPlayer.id} who is ${closestPlayer.distance.toFixed(1)} units away.`,
+            charState.position
+          );
+          
           await worker.functions.find(f => f.name === "approach_player").executable({
             playerId: closestPlayer.id
           }, (msg) => console.log(`[Character ${characterId}] ${msg}`));
         }
-      } 
+      }
       // No players nearby, wander randomly
       else if (Math.random() < 0.5) { // Increased to 50% chance to wander for testing
         // Generate a random position within reasonable bounds
@@ -322,6 +354,21 @@ class AIAgentService {
         const randomZ = charState.position[2] + (Math.random() * 10 - 5);
         
         console.log(`[AIAgentService] Character ${characterId} (${charState.name}) wandering to [${randomX.toFixed(2)}, 0, ${randomZ.toFixed(2)}]`);
+        
+        // Log character thought and action
+        await db.addCharacterThought(
+          characterId,
+          'thought',
+          `I think I'll explore over towards [${randomX.toFixed(1)}, 0, ${randomZ.toFixed(1)}].`,
+          charState.position
+        );
+        
+        await db.addCharacterThought(
+          characterId,
+          'action',
+          `Wandering to position [${randomX.toFixed(1)}, 0, ${randomZ.toFixed(1)}].`,
+          charState.position
+        );
         
         await worker.functions.find(f => f.name === "move_to_position").executable({
           x: randomX,
@@ -369,6 +416,21 @@ class AIAgentService {
       const randomZ = charState.position[2] + (Math.random() * 10 - 5);
       
       console.log(`[AIAgentService] Forcing character ${characterId} (${charState.name}) to wander to [${randomX.toFixed(2)}, 0, ${randomZ.toFixed(2)}]`);
+      
+      // Log character thought and action
+      await db.addCharacterThought(
+        characterId,
+        'thought',
+        `I feel like exploring a new area. I'll head towards [${randomX.toFixed(1)}, 0, ${randomZ.toFixed(1)}].`,
+        charState.position
+      );
+      
+      await db.addCharacterThought(
+        characterId,
+        'action',
+        `Wandering to position [${randomX.toFixed(1)}, 0, ${randomZ.toFixed(1)}] (forced movement).`,
+        charState.position
+      );
       
       await worker.functions.find(f => f.name === "move_to_position").executable({
         x: randomX,
@@ -450,11 +512,27 @@ class AIAgentService {
           
           console.log(`[AIAgentService] Character ${characterId} reached target position [${targetPos}]`);
           
+          // Log that character reached destination
+          db.addCharacterThought(
+            characterId,
+            'movement',
+            `I've arrived at my destination [${targetPos[0].toFixed(1)}, ${targetPos[1].toFixed(1)}, ${targetPos[2].toFixed(1)}].`,
+            targetPos
+          ).catch(err => console.error('Error logging character thought:', err));
+          
           // If this was an approach interaction, initiate conversation
           if (charState.currentInteraction?.type === 'approach') {
             charState.isInteracting = true;
             charState.lastInteractionTime = Date.now();
             console.log(`[AIAgentService] Character ${characterId} starting interaction after approach`);
+            
+            // Log that character is starting interaction
+            db.addCharacterThought(
+              characterId,
+              'action',
+              `I've reached player ${charState.currentInteraction.targetId} and I'm starting interaction.`,
+              targetPos
+            ).catch(err => console.error('Error logging character thought:', err));
           }
           
           continue;
@@ -476,6 +554,16 @@ class AIAgentService {
         ];
         
         charState.position = newPosition;
+        
+        // Log movement occasionally to avoid database spam
+        if (Math.random() < 0.01) { // 1% chance each update to log movement
+          db.addCharacterThought(
+            characterId,
+            'movement',
+            `I'm walking towards [${targetPos[0].toFixed(1)}, ${targetPos[1].toFixed(1)}, ${targetPos[2].toFixed(1)}].`,
+            newPosition
+          ).catch(err => console.error('Error logging character movement:', err));
+        }
         
         // Update roomState for synchronization (only x and z change)
         if (this.roomState && this.roomState.characters && this.roomState.characters[characterId]) {

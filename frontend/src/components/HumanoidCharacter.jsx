@@ -17,10 +17,21 @@ const HumanoidCharacter = ({ character, onClick, isSelected, isNearby, isMoving 
   const [animationTime, setAnimationTime] = useState(0);
   const [bobOffset, setBobOffset] = useState(0);
   
+  // Add local interaction state to provide more stability
+  const [isLocallySelected, setIsLocallySelected] = useState(isSelected);
+  
   // Colors
   const skinColor = new THREE.Color(character.skinColor || '#e0ac69');
   const clothesColor = new THREE.Color(character.primaryColor || character.color || '#4287f5');
   const highlightColor = new THREE.Color(clothesColor).lerp(new THREE.Color('white'), 0.3);
+  const selectionColor = new THREE.Color('#ffdd00');
+  
+  // Update local state when prop changes
+  useEffect(() => {
+    if (isSelected) {
+      setIsLocallySelected(true);
+    }
+  }, [isSelected]);
   
   // Update animation time
   useFrame((state, delta) => {
@@ -38,7 +49,7 @@ const HumanoidCharacter = ({ character, onClick, isSelected, isNearby, isMoving 
       headRef.current.rotation.y = Math.sin(state.clock.elapsedTime * 0.5) * 0.2;
       
       // If nearby, make the character look at the player
-      if (isNearby || isInteracting) {
+      if (isNearby || isInteracting || isSelected || isLocallySelected) {
         const lookAtPlayer = new THREE.Vector3(0, 1.5, 5); // Approximate player position
         headRef.current.lookAt(lookAtPlayer);
         // Limit rotation to avoid unnatural angles
@@ -48,7 +59,7 @@ const HumanoidCharacter = ({ character, onClick, isSelected, isNearby, isMoving 
     }
     
     // Arm movement for selected character or when interacting (talking animation)
-    if ((isSelected || isInteracting) && rightArmRef.current && leftArmRef.current) {
+    if ((isSelected || isLocallySelected || isInteracting) && rightArmRef.current && leftArmRef.current) {
       // Right arm gestures
       rightArmRef.current.rotation.x = Math.sin(state.clock.elapsedTime * 2) * 0.2 - 0.3;
       rightArmRef.current.rotation.z = Math.cos(state.clock.elapsedTime * 1.5) * 0.1;
@@ -63,7 +74,7 @@ const HumanoidCharacter = ({ character, onClick, isSelected, isNearby, isMoving 
     }
     
     // Special nearby animation - wave arm when nearby but not interacting
-    if (isNearby && !isSelected && !isInteracting && rightArmRef.current) {
+    if (isNearby && !isSelected && !isLocallySelected && !isInteracting && rightArmRef.current) {
       rightArmRef.current.rotation.x = Math.sin(state.clock.elapsedTime * 3) * 0.5 - 0.5;
       rightArmRef.current.rotation.z = Math.sin(state.clock.elapsedTime * 3) * 0.2;
     }
@@ -79,59 +90,48 @@ const HumanoidCharacter = ({ character, onClick, isSelected, isNearby, isMoving 
   // Apply selection effects
   useEffect(() => {
     if (bodyRef.current) {
-      if (isSelected) {
+      if (isSelected || isLocallySelected) {
         bodyRef.current.material.color.set(highlightColor);
       } else {
         bodyRef.current.material.color.set(clothesColor);
       }
     }
-  }, [isSelected, clothesColor, highlightColor]);
+  }, [isSelected, isLocallySelected, clothesColor, highlightColor]);
+  
+  // Handle click
+  const handleClick = () => {
+    setIsLocallySelected(true);
+    if (onClick) {
+      onClick(character);
+    }
+  };
   
   // Determine if character can be interacted with (nearby or selected)
-  const isInteractable = isNearby || isSelected;
+  const isInteractable = isNearby || isSelected || isLocallySelected || hovered;
   
   return (
     <group 
       ref={group} 
       position={[character.position[0], character.position[1], character.position[2]]}
-      onClick={() => isInteractable && onClick(character)}
+      onClick={isInteractable ? handleClick : undefined}
       onPointerOver={() => setHovered(true)}
       onPointerOut={() => setHovered(false)}
       rotation={[0, character.rotation?.[1] || 0, 0]}
+      // Increase the priority of this object for raycasting
+      raycast={(raycaster, intersects) => {
+        if (isInteractable) {
+          // Use a larger collision volume when interactable
+          const tempSphere = new THREE.Sphere(new THREE.Vector3(0, 1, 0), 1);
+          if (raycaster.ray.intersectsSphere(tempSphere)) {
+            intersects.push({
+              distance: raycaster.ray.origin.distanceTo(tempSphere.center),
+              object: group.current,
+              point: new THREE.Vector3()
+            });
+          }
+        }
+      }}
     >
-      {/* Status indicators */}
-      {isMoving && (
-        <Text
-          position={[0, 2.3, 0]}
-          color="#7af7ff"
-          fontSize={0.12}
-          maxWidth={2}
-          textAlign="center"
-          anchorY="bottom"
-          outlineWidth={0.01}
-          outlineColor="#000000"
-          lookAt={camera.position}
-        >
-          Moving...
-        </Text>
-      )}
-      
-      {isInteracting && !isSelected && (
-        <Text
-          position={[0, 2.3, 0]}
-          color="#ffaa00"
-          fontSize={0.12}
-          maxWidth={2}
-          textAlign="center"
-          anchorY="bottom"
-          outlineWidth={0.01}
-          outlineColor="#000000"
-          lookAt={camera.position}
-        >
-          Thinking...
-        </Text>
-      )}
-      
       {/* Body */}
       <mesh ref={bodyRef} castShadow position={[0, 0.8, 0]}>
         <capsuleGeometry args={[0.3, 0.8, 4, 8]} />

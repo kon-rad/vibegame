@@ -28,6 +28,7 @@ model Character {
   conversations   Conversation[]
   chatRooms       ChatRoom[]       // New relationship with ChatRoom
   tokenGrants     TokenGrant[]     // Track tokens granted by this character
+  thoughts        CharacterThought[] // Relation to thoughts and actions
 
   @@map("characters")
 }
@@ -132,4 +133,18 @@ model TokenGrant {
   createdAt   DateTime  @default(now()) @map("created_at")
 
   @@map("token_grants")
+}
+
+// New model for tracking character thoughts and actions
+model CharacterThought {
+  id          Int       @id @default(autoincrement())
+  character   Character @relation(fields: [characterId], references: [id])
+  characterId Int       @map("character_id")
+  type        String    // 'thought', 'action', 'movement', etc.
+  content     String    // The actual thought or action description
+  position    String?   // Optional JSON string for position at time of thought
+  metadata    String?   // Additional data as JSON string
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  @@map("character_thoughts")
 }
